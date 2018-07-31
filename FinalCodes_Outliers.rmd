@@ -1,0 +1,162 @@
+---
+title: "Final Codes Without Outliers"
+output: pdf_document
+---
+
+```{r}
+#This file is an extension of FinalCodes.rmd file, 
+#the FinalCodes file should be run prior to execution of this file.
+
+
+#[1] Detection and removal of outliers
+library(dplyr)
+
+CS_dfClean<-sapply(colnames(select_if(CS_df, is.numeric)),function(col.name){
+  outlier<-boxplot.stats(CS_df[[col.name]])$out
+  CS_df[[col.name]]<-ifelse(CS_df[[col.name]] %in% outlier, NA, CS_df[[col.name]])
+})
+
+CS_dfClean<- cbind(CS_dfClean, CS_df[,c(2:4,6:11,24)])
+
+CS_Clean<-as.data.frame(CS_dfClean[complete.cases(CS_dfClean),])
+```
+
+
+```{r}
+# [2] Divide the clean dataset into training and test datasets(without outliers)
+library(caret)
+indnew <- createDataPartition(CS_Clean$DEF_PAY_NEXT_MONTH, p=2/3, list = FALSE)
+trainnew <- CS_Clean[indnew, ]
+testnew <- CS_Clean[-indnew, ]
+```
+
+```{r}
+#[3] SVM after removing outliers
+svmpre <- train(
+  DEF_PAY_NEXT_MONTH ~ .,
+  data = trainnew,
+  method = "svmRadial",
+  trControl = train_control,
+  metric = "ROC",
+  preProcess = c("center", "scale")
+)
+svmpre
+```
+
+```{r}
+#[4] Confusion matrix for SVM Model after removing outliers
+svmpre_predict <- predict(svmpre, testnew)
+confusionMatrix(svmpre_predict, testnew$DEF_PAY_NEXT_MONTH, positive = "Yes")
+```
+
+```{r}
+#[5] AUC and ROC for SVM after removal of outliers
+library(pROC)
+svmpre_PredWithProb <- predict(svmpre, testnew, type = "prob")
+
+svmpre_auc <- auc(testnew$DEF_PAY_NEXT_MONTH, svmpre_PredWithProb[,2])
+svmpre_auc
+plot(roc(testnew$DEF_PAY_NEXT_MONTH, svmpre_PredWithProb[,2]))
+
+```
+
+```{r}
+#[6] KNN Model after removal of outliers
+set.seed(3333)
+knnnew <- train(
+  DEF_PAY_NEXT_MONTH ~ .,
+  data = trainnew,
+  method = "knn",
+  tuneGrid   = expand.grid(k = 1:20),
+  trControl = train_control,
+  preProcess = c("center", "scale")
+)
+knnnew
+```
+
+```{r}
+#[7] Confusion Matrix for KNN without outliers
+knnnew_predict <- predict(knnnew, testnew)
+confusionMatrix(knnnew_predict, testnew$DEF_PAY_NEXT_MONTH, positive = "Yes")
+```
+
+
+```{r}
+#[8] AUC and ROC for KNN after removing outliers
+library(pROC)
+knnnew_PredWithProb <- predict(knnnew, testnew, type = "prob")
+knnnew_auc <- auc(testnew$DEF_PAY_NEXT_MONTH, knnnew_PredWithProb[,2])
+knnnew_auc
+plot(roc(testnew$DEF_PAY_NEXT_MONTH, knnnew_PredWithProb[,2]))
+```
+
+```{r}
+#[9] NN model without outliers
+set.seed(6000)
+nnnew <- train(
+  DEF_PAY_NEXT_MONTH ~ .,
+  data = trainnew,
+  method = "nnet",
+  preProcess=c("scale","center"),
+  trControl = train_control
+  )
+nnnew
+```
+
+```{r}
+#[10] Confusion Matrix, AUC and ROC for NN after removal of outliers
+nnnew_predict <- predict(nnnew, testnew)
+confusionMatrix(nnnew_predict, testnew$DEF_PAY_NEXT_MONTH, positive = "Yes")
+library(pROC)
+nnnew_PredWithProb <- predict(nnnew, testnew, type = "prob")
+nnnew_auc <- auc(testnew$DEF_PAY_NEXT_MONTH, nnnew_PredWithProb[,2])
+nnnew_auc
+plot(roc(testnew$DEF_PAY_NEXT_MONTH, nnnew_PredWithProb[,2]))
+
+```
+
+
+```{r}
+#[11] pcaNNet Model after removal of outliers
+set.seed(6000)
+library(caret)
+pcannnew <- train(
+  DEF_PAY_NEXT_MONTH ~ .,
+  data = trainnew,
+  method = "pcaNNet",
+  preProcess=c("scale","center"),
+  trControl = train_control
+  )
+pcannnew
+```
+
+
+```{r}
+#[12] Confusion Matrix for pcaNNet after removal of outliers
+pcannnew_predict <- predict(pcannnew, testnew)
+confusionMatrix(pcannnew_predict, testnew$DEF_PAY_NEXT_MONTH, positive = "Yes")
+```
+
+
+
+```{r}
+#[13] AUC and ROC curve for pcaNNet after removal of outliers
+library(pROC)
+pcannnew_PredWithProb <- predict(pcannnew, testnew, type = "prob")
+#head(PredWithProb)
+pcannnew_auc <- auc(testnew$DEF_PAY_NEXT_MONTH, pcannnew_PredWithProb[,2])
+pcannnew_auc
+plot(roc(testnew$DEF_PAY_NEXT_MONTH, pcannnew_PredWithProb[,2]))
+
+```
+
+```{r}
+#[14] Comparison of SVM,KNN,NN,PCANN after removal of outliers
+resamps <- resamples(list(SVM = svmpre, KNN = knnnew, NN = nnnew, PCANN = pcannnew))
+summary(resamps)
+# boxplots of results
+bwplot(resamps)
+# dot plots of results
+dotplot(resamps)
+```
+

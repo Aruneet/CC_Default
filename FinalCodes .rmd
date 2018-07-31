@@ -1,0 +1,352 @@
+---
+title: "Final Codes"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+#[1] Read CSV
+CapstoneDataSet <- read.csv("{Download the file 'Data.csv' and use your local path to the file}", header = TRUE, sep = ",")
+```
+
+```{r}
+#[2] To remove ID column from CapstoneDataSet
+CapstoneDataSet$ID <- NULL
+```
+
+```{r}
+#[3] Rename CapstoneDataSet as CS_df
+CS_df <- CapstoneDataSet
+```
+
+```{r}
+#[4] To view structure of dataset
+str(CS_df)
+```
+
+```{r}
+#[5] Loading the required packages
+install.packages("caret")
+install.packages("randomForest")
+install.packages("dplyr")
+install.packages("DMwR") 
+install.packages("e1071")
+install.packages("pROC")
+```
+
+```{r}
+#[6] Check zero variance variables
+zero_var <- nearZeroVar(CS_df, saveMetrics = TRUE)
+zero_var
+```
+
+```{r}
+#[7] Changing the categorical variables to factor variables:
+CS_df[,c(2:4,6:11)] <- lapply(CS_df[,c(2:4,6:11)], factor)
+CS_df$DEF_PAY_NEXT_MONTH <- factor(CS_df$DEF_PAY_NEXT_MONTH)
+levels(CS_df$DEF_PAY_NEXT_MONTH) <- c("No","Yes")
+str(CS_df)
+```
+
+```{r}
+#[8] To view the boxplot of the data set
+boxplot(CS_df[,c(1,5,12:17)], las = 2, col = c("red","cyan","blue","grey", "pink","orange","brown","green"), ylim = c(0,600000))
+boxplot(CS_df[,c(18:23)],las = 2, col = c("black","yellow","royalblue","magenta","darkgreen","white"), ylim = c(0,30000))
+```
+
+```{r}
+#[9] To see the correlation between different attributes of the data set.
+cor(CS_df[,c(1,5,12:23)], use = "all.obs", method = "pearson")
+```
+
+```{r}
+#[10] Initial Regression
+model_LR <- glm(DEF_PAY_NEXT_MONTH ~.,family=binomial(link='logit'),data=CS_df)
+summary(model_LR)
+```
+
+```{r}
+#[11] Attribute Selection using Random Forest
+require(randomForest)
+fit=randomForest(DEF_PAY_NEXT_MONTH~., data=CS_df)
+```
+
+```{r}
+#[12] Significant Attribute Selection
+library(caret)
+varImp(fit)
+varImpPlot(fit,type=2)
+```
+
+```{r}
+#[13] Selecting the Significant Attributes
+CS_new <- CS_df[,c(1,2,4,5,12,13,14,15,18,19,24)]
+head(CS_new)
+```
+
+```{r}
+#[14] Divide the dataset into training and test datasets
+ind <- createDataPartition(CS_new$DEF_PAY_NEXT_MONTH, p=2/3, list = FALSE)
+trainDF <- CS_new[ind, ]
+testDF <- CS_new[-ind, ]
+```
+
+```{r}
+#[15] 10 fold cross validation:
+# load the library
+library(caret)
+# define training control
+train_control <- trainControl(method="cv", number=10, verboseIter = T,
+                              classProbs = T, sampling = "smote", 
+                              summaryFunction = twoClassSummary,
+                              savePredictions = T)
+
+tr_ctrl <- trainControl(method="cv", number=10, verboseIter = T,
+                              classProbs = T, 
+                              summaryFunction = twoClassSummary,
+                              savePredictions = T)
+
+```
+
+```{r}
+#[16] SVM without smote
+svmmodel <- train(
+  DEF_PAY_NEXT_MONTH ~ .,
+  data = trainDF,
+  method = "svmRadial",
+  trControl = tr_ctrl,
+  metric = "ROC"
+)
+svmmodel
+```
+
+```{r}
+# [17] Confusion Matrix for SVM without SMOTE
+library(caret)
+svmmodel_predict <- predict(svmmodel, testDF)
+confusionMatrix(svmmodel_predict, testDF$DEF_PAY_NEXT_MONTH, positive = "Yes")
+```
+
+```{r}
+#[18] AUC and ROC Curve for SVM without SMOTE
+library(pROC)
+svmmodel_PredWithProb <- predict(svmmodel, testDF, type = "prob")
+svmmodel_auc <- auc(testDF$DEF_PAY_NEXT_MONTH, svmmodel_PredWithProb[,2])
+svmmodel_auc
+plot(roc(testDF$DEF_PAY_NEXT_MONTH, svmmodel_PredWithProb[,2]))
+
+```
+
+```{r}
+#[19] SVM Model(With SMOTE)
+svmFit <- train(
+  DEF_PAY_NEXT_MONTH ~ .,
+  data = trainDF,
+  method = "svmRadial",
+  trControl = train_control,
+  metric = "ROC"
+)
+
+svmFit
+```
+
+```{r}
+#[20] Confusion matrix for SVM Model(With SMOTE)
+svm_predict <- predict(svmFit, testDF)
+confusionMatrix(svm_predict, testDF$DEF_PAY_NEXT_MONTH, positive = "Yes")
+```
+
+```{r}
+#[21] AUC and ROC Curve for SVM Model(With SMOTE)
+library(pROC)
+svm_PredWithProb <- predict(svmFit, testDF, type = "prob")
+#head(PredWithProb)
+svm_auc <- auc(testDF$DEF_PAY_NEXT_MONTH, svm_PredWithProb[,2])
+svm_auc
+plot(roc(testDF$DEF_PAY_NEXT_MONTH, svm_PredWithProb[,2]))
+
+```
+
+```{r}
+#[22] KNN Model without SMOTE
+set.seed(3333)
+knnmodel <- train(
+  DEF_PAY_NEXT_MONTH ~ .,
+  data = trainDF,
+  method = "knn",
+  tuneGrid   = expand.grid(k = 1:20),
+  trControl = tr_ctrl
+  
+)
+knnmodel
+
+```
+
+```{r}
+#[23] Confusion Matrix for KNN Model without SMOTE
+knnmodel_predict <- predict(knnmodel, testDF)
+confusionMatrix(knnmodel_predict, testDF$DEF_PAY_NEXT_MONTH, positive = "Yes")
+```
+
+```{r}
+#[24] AUC and ROC Curve for KNN Model without SMOTE
+library(pROC)
+knnmodel_PredWithProb <- predict(knnmodel, testDF, type = "prob")
+#head(PredWithProb)
+knnmodel_auc <- auc(testDF$DEF_PAY_NEXT_MONTH, knnmodel_PredWithProb[,2])
+knnmodel_auc
+plot(roc(testDF$DEF_PAY_NEXT_MONTH, knnmodel_PredWithProb[,2]))
+```
+
+```{r}
+#[25] KNN Model with SMOTE
+set.seed(3333)
+knnFit <- train(
+  DEF_PAY_NEXT_MONTH ~ .,
+  data = trainDF,
+  method = "knn",
+  tuneGrid   = expand.grid(k = 1:20),
+  trControl = train_control
+  
+)
+knnFit
+```
+
+```{r}
+#[26] Confusion matrix for KNN Model with SMOTE
+knn_predict <- predict(knnFit, testDF)
+confusionMatrix(knn_predict, testDF$DEF_PAY_NEXT_MONTH, positive = "Yes")
+```
+
+```{r}
+#[27] AUC and ROC Curve for KNN Model with SMOTE
+library(pROC)
+knn_PredWithProb <- predict(knnFit, testDF, type = "prob")
+#head(PredWithProb)
+knn_auc <- auc(testDF$DEF_PAY_NEXT_MONTH, knn_PredWithProb[,2])
+knn_auc
+plot(roc(testDF$DEF_PAY_NEXT_MONTH, knn_PredWithProb[,2]))
+
+```
+
+```{r}
+#[28] Neural Network Model without SMOTE
+set.seed(6000)
+nnmodel <- train(
+  DEF_PAY_NEXT_MONTH ~ .,
+  data = trainDF,
+  method = "nnet",
+  preProcess=c("scale","center"),
+  trControl = tr_ctrl,
+  tunelength = 4 )
+nnmodel
+
+```
+
+```{r}
+#[29] Confusion Matrix for NN model without SMOTE 
+nnmodel_predict <- predict(nnmodel, testDF)
+confusionMatrix(nnmodel_predict, testDF$DEF_PAY_NEXT_MONTH, positive = "Yes")
+```
+
+```{r}
+#[30] AUC and ROC Curve for NN Model without SMOTE 
+library(pROC)
+nnmodel_PredWithProb <- predict(nnmodel, testDF, type = "prob")
+#head(PredWithProb)
+nnmodel_auc <- auc(testDF$DEF_PAY_NEXT_MONTH, nnmodel_PredWithProb[,2])
+nnmodel_auc
+plot(roc(testDF$DEF_PAY_NEXT_MONTH, nnmodel_PredWithProb[,2]))
+```
+
+```{r}
+#[31] Neural Network Model with SMOTE
+set.seed(6000)
+nnFit <- train(
+  DEF_PAY_NEXT_MONTH ~ .,
+  data = trainDF,
+  method = "nnet",
+  preProcess=c("scale","center"),
+  trControl = train_control
+  )
+nnFit
+```
+
+```{r}
+#[32] Confusion Matrix for Neural Network Model with SMOTE
+nn_predict <- predict(nnFit, testDF)
+confusionMatrix(nn_predict, testDF$DEF_PAY_NEXT_MONTH, positive = "Yes")
+```
+
+```{r}
+#[33] AUC and ROC Curve for NN Model with SMOTE
+library(pROC)
+nn_PredWithProb <- predict(nnFit, testDF, type = "prob")
+#head(PredWithProb)
+nn_auc <- auc(testDF$DEF_PAY_NEXT_MONTH, nn_PredWithProb[,2])
+nn_auc
+plot(roc(testDF$DEF_PAY_NEXT_MONTH, nn_PredWithProb[,2]))
+
+```
+
+```{r}
+#[34] pcaNNet Model without SMOTE
+set.seed(6000)
+library(caret)
+pcaNNmodel <- train(
+  DEF_PAY_NEXT_MONTH ~ .,
+  data = trainDF,
+  method = "pcaNNet",
+  preProcess=c("scale","center"),
+  trControl = tr_ctrl
+  )
+pcaNNmodel
+```
+
+```{r}
+#[35] Confusion Matrix for pcaNNet Model without SMOTE 
+pcaNNmodel_predict <- predict(pcaNNmodel, testDF)
+confusionMatrix(pcaNNmodel_predict, testDF$DEF_PAY_NEXT_MONTH, positive = "Yes")
+```
+
+```{r}
+#[36] AUC and ROC Curve for pcaNNet Model without SMOTE
+library(pROC)
+pcaNNmodel_PredWithProb <- predict(pcaNNmodel, testDF, type = "prob")
+#head(Pred
+pcaNNmodel_auc <- auc(testDF$DEF_PAY_NEXT_MONTH, pcaNNmodel_PredWithProb[,2])
+pcaNNmodel_auc
+plot(roc(testDF$DEF_PAY_NEXT_MONTH, pcaNNmodel_PredWithProb[,2]))
+```
+
+```{r}
+#[37] pcaNNet Model with SMOTE
+set.seed(6000)
+library(caret)
+pcaNNetFit <- train(
+  DEF_PAY_NEXT_MONTH ~ .,
+  data = trainDF,
+  method = "pcaNNet",
+  preProcess=c("scale","center"),
+  trControl = train_control
+  )
+pcaNNetFit
+```
+
+```{r}
+#[38] Confusion Matrix for pcaNNet Model with SMOTE
+pcaNNet_predict <- predict(pcaNNetFit, testDF)
+confusionMatrix(pcaNNet_predict, testDF$DEF_PAY_NEXT_MONTH, positive = "Yes")
+```
+
+```{r}
+#[39]AUC and ROC Curve for pcaNNet Model with SMOTE
+library(pROC)
+pcaNNet_PredWithProb <- predict(pcaNNetFit, testDF, type = "prob")
+#head(PredWithProb)
+pcaNNet_auc <- auc(testDF$DEF_PAY_NEXT_MONTH, pcaNNet_PredWithProb[,2])
+pcaNNet_auc
+plot(roc(testDF$DEF_PAY_NEXT_MONTH, pcaNNet_PredWithProb[,2]))
+
+```
